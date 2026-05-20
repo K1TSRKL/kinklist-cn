@@ -217,8 +217,8 @@ $(function(){
 
             })();
 
-            // Try to restore draft (from cookie)
-            try { inputKinks.loadDraft(); } catch(e) {}
+            // Try to restore draft (from cookie) asynchronously to avoid blocking
+            try { setTimeout(function(){ inputKinks.loadDraft(); }, 0); } catch(e) {}
 
             // Save draft on unload
             $(window).on('beforeunload', function(){
@@ -513,7 +513,7 @@ $(function(){
             var outputPow = inputKinks.maxPow(hashBase, Number.MAX_SAFE_INTEGER);
 
             var values = [];
-            var numChunks = Math.max(output.length / outputPow)
+            var numChunks = Math.ceil(output.length / outputPow);
             for(var i = 0; i < numChunks; i++){
                 var chunk = output.substring(i * outputPow, (i + 1) * outputPow);
                 var chunkValues = inputKinks.decodeChunk(base, chunk);
@@ -563,12 +563,32 @@ $(function(){
             var hash = location.hash.substring(1);
             if(!hash || hash.length === 0) return;
 
-            var values = inputKinks.decode(Object.keys(colors).length, hash);
+            // sanitize hash: only allow known chars and cap length
+            var allowed = inputKinks.hashChars;
+            var filtered = '';
+            for(var i = 0; i < hash.length; i++){
+                if(allowed.indexOf(hash[i]) >= 0) filtered += hash[i];
+            }
+            hash = filtered;
+            var MAX_HASH_LEN = 300;
+            if(hash.length > MAX_HASH_LEN) hash = hash.substring(0, MAX_HASH_LEN);
+
+            try {
+                var values = inputKinks.decode(Object.keys(colors).length, hash);
+            } catch(e) {
+                console.error('Failed to decode hash', e);
+                return;
+            }
+
             var valueIndex = 0;
             $('#InputList .choices').each(function(){
+                if(valueIndex >= values.length) return;
                 var $this = $(this);
                 var value = values[valueIndex++];
-                $this.children().eq(value).addClass('selected');
+                if(typeof value === 'number' && value >= 0) {
+                    var $child = $this.children().eq(value);
+                    if($child.length) $child.addClass('selected');
+                }
             });
         },
         saveSelection: function(){
