@@ -52,6 +52,7 @@ $(function(){
             var kinksText = $('#Kinks').val();
             kinks = inputKinks.parseKinksText(kinksText);
             inputKinks.fillInputList();
+            if(typeof inputKinks.init === 'function') inputKinks.init();
         }, 'text').fail(function(){
             // Fallback to top-level file if localized file not found
             var fallback = list + '.txt';
@@ -62,6 +63,7 @@ $(function(){
                 var kinksText = $('#Kinks').val();
                 kinks = inputKinks.parseKinksText(kinksText);
                 inputKinks.fillInputList();
+                if(typeof inputKinks.init === 'function') inputKinks.init();
             }, 'text');
         });
     }
@@ -180,9 +182,14 @@ $(function(){
             // Make things update hash
             $('#InputList').find('button.choice').on('click', function(){
                 location.hash = inputKinks.updateHash();
+                try { inputKinks.saveDraft(); } catch(e) {}
             });
         },
         init: function(){
+            // Prevent double-init
+            if(inputKinks._inited) return;
+            inputKinks._inited = true;
+
             // Set up DOM
             inputKinks.fillInputList();
 
@@ -190,8 +197,8 @@ $(function(){
             inputKinks.parseHash();
 
             // Make export button work
-            $('#Export').on('click', inputKinks.export);
-            $('#URL').on('click', function(){ this.select(); });
+            $('#Export').off('click').on('click', inputKinks.export);
+            $('#URL').off('click').on('click', function(){ this.select(); });
 
             // On resize, redo columns
             (function(){
@@ -209,6 +216,14 @@ $(function(){
                 });
 
             })();
+
+            // Try to restore draft (from cookie)
+            try { inputKinks.loadDraft(); } catch(e) {}
+
+            // Save draft on unload
+            $(window).on('beforeunload', function(){
+                try { inputKinks.saveDraft(); } catch(e) {}
+            });
         },
         hashChars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.=+*^!@",
         maxPow: function(base, maxVal) {
@@ -546,7 +561,7 @@ $(function(){
         },
         parseHash: function(){
             var hash = location.hash.substring(1);
-            if(hash.length < 10) return;
+            if(!hash || hash.length === 0) return;
 
             var values = inputKinks.decode(Object.keys(colors).length, hash);
             var valueIndex = 0;
@@ -662,6 +677,64 @@ $(function(){
         }					
     };
 
+    // Cookie draft helpers
+    inputKinks.setCookie = function(name, value, days){
+        var expires = '';
+        if(typeof days === 'number'){
+            var d = new Date();
+            d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = '; expires=' + d.toUTCString();
+        }
+        document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/';
+    };
+
+    inputKinks.getCookie = function(name){
+        var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+        return match ? decodeURIComponent(match[1]) : null;
+    };
+
+    inputKinks.saveDraft = function(){
+        try{
+            this.setCookie('kinklist_draft_hash', (location.hash.substring(1) || ''), 30);
+            this.setCookie('kinklist_draft_kinks', ($('#Kinks').val() || ''), 30);
+            this.setCookie('kinklist_draft_listType', ($('#listType').val() || ''), 30);
+            this.setCookie('kinklist_draft_lang', ($('#langSelect').val() || ''), 30);
+        }catch(e){}
+    };
+
+    inputKinks.loadDraft = function(){
+        var hash = this.getCookie('kinklist_draft_hash');
+        var kinksText = this.getCookie('kinklist_draft_kinks');
+        var listType = this.getCookie('kinklist_draft_listType');
+        var lang = this.getCookie('kinklist_draft_lang');
+        if(!hash && !kinksText) return;
+        if(confirm('检测到未保存的草稿，是否恢复？')){
+            if(listType) $('#listType').val(listType);
+            if(lang) $('#langSelect').val(lang);
+            if(kinksText && kinksText.length){
+                $('#Kinks').val(kinksText);
+                try{
+                    kinks = this.parseKinksText(kinksText);
+                    this.fillInputList();
+                }catch(e){}
+            }
+            if(hash && hash.length){
+                location.hash = '#' + hash;
+                this.parseHash();
+            } else {
+                this.parseHash();
+            }
+            this.clearDraft();
+        }
+    };
+
+    inputKinks.clearDraft = function(){
+        this.setCookie('kinklist_draft_hash', '', -1);
+        this.setCookie('kinklist_draft_kinks', '', -1);
+        this.setCookie('kinklist_draft_listType', '', -1);
+        this.setCookie('kinklist_draft_lang', '', -1);
+    };
+
     $('#Edit').on('click', function(){
         var KinksText = inputKinks.inputListToText();
         $('#Kinks').val(KinksText.trim());
@@ -682,6 +755,8 @@ $(function(){
             return;
         }
         inputKinks.restoreSavedSelection(selection);
+        // Clear draft after user applied edits
+        try { inputKinks.clearDraft(); } catch(e) {}
         $('#EditOverlay').fadeOut();
     });
     $('.overlay > *').on('click', function(e){
