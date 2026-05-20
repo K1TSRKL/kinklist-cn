@@ -671,7 +671,7 @@ $(function(){
                     else {
                         fieldLine = fieldLine.substring(1);
                     }
-                    cat.fields = fieldLine.trim().split(',');
+                    cat.fields = fieldLine.trim().split(/[,，、]/);
                     for(var j = 0; j < cat.fields.length; j++){
                         cat.fields[j] = cat.fields[j].trim();
                     }
