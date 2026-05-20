@@ -38,7 +38,6 @@ var level = {};
 
 $(function(){
 
-    var imgurClientId = '9db53e5936cd02f';
     var currentLang = 'en';
 
     function loadListText() {
@@ -449,32 +448,36 @@ $(function(){
                 }
             }
 
-            //return $(canvas).insertBefore($('#InputList'));
+            // Direct PNG download, no external upload needed.
+            var fileName = 'kinklist' + (username ? username.replace(/[()]/g, '') : '') + '.png';
+            var triggerDownload = function(blobUrl){
+                var $link = $('<a>')
+                    .attr('href', blobUrl)
+                    .attr('download', fileName)
+                    .css('display', 'none')
+                    .appendTo('body');
 
-            // Send canvas to imgur
-            $.ajax({
-                url: 'https://api.imgur.com/3/image',
-                type: 'POST',
-                headers: {
-                    // Your application gets an imgurClientId from Imgur
-                    Authorization: 'Client-ID ' + imgurClientId,
-                    Accept: 'application/json'
-                },
-                data: {
-                    // convert the image data to base64
-                    image:  canvas.toDataURL().split(',')[1],
-                    type: 'base64'
-                },
-                success: function(result) {
+                $link[0].click();
+                setTimeout(function(){
+                    $link.remove();
+                    if(blobUrl.indexOf('blob:') === 0) URL.revokeObjectURL(blobUrl);
                     $('#Loading').hide();
-                    var url = 'https://i.imgur.com/' + result.data.id + '.png';
-                    $('#URL').val(url).fadeIn();
-                },
-                fail: function(){
-                    $('#Loading').hide();
-                    alert('Failed to upload to imgur, could not connect');
-                }
-            });
+                    $('#URL').val('已下载：' + fileName).fadeIn();
+                }, 100);
+            };
+
+            if(canvas.toBlob) {
+                canvas.toBlob(function(blob){
+                    if(!blob) {
+                        triggerDownload(canvas.toDataURL('image/png'));
+                        return;
+                    }
+                    triggerDownload(URL.createObjectURL(blob));
+                }, 'image/png');
+            }
+            else {
+                triggerDownload(canvas.toDataURL('image/png'));
+            }
         },
         encode: function(base, input){
             var hashBase = inputKinks.hashChars.length;
